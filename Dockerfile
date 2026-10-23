@@ -4,33 +4,35 @@ WORKDIR /src
 
 COPY . .
 
-# 恢复依赖
+# 恢复并编译项目
 RUN dotnet restore Roblox/Roblox.Website/Roblox.Website.csproj
 
-# 发布项目
 RUN dotnet publish Roblox/Roblox.Website/Roblox.Website.csproj \
     -c Release \
     --no-restore \
     -o /app/publish
 
-# 检查配置文件和密钥文件
+# 检查配置文件
 RUN test -f Roblox/Roblox.Website/appsettings.json
 RUN test -f Roblox/Roblox.Website/game-servers.json
-RUN test -f Keys/PrivateKeyBlob.txt
-RUN test -f Keys/PrivateKey2048.pem
+
+# 自动查找密钥文件，并复制到统一目录
+RUN set -eu; \
+    BLOB="$(find /src -type f -name 'PrivateKeyBlob.txt' -print -quit)"; \
+    PEM="$(find /src -type f -name 'PrivateKey2048.pem' -print -quit)"; \
+    test -n "$BLOB"; \
+    test -n "$PEM"; \
+    mkdir -p /app/Keys; \
+    cp "$BLOB" /app/Keys/PrivateKeyBlob.txt; \
+    cp "$PEM" /app/Keys/PrivateKey2048.pem
 
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
 WORKDIR /app
 
-# 复制发布文件
 COPY --from=build /app/publish .
-
-# 复制配置文件
 COPY --from=build /src/Roblox/Roblox.Website/appsettings.json /app/appsettings.json
 COPY --from=build /src/Roblox/Roblox.Website/game-servers.json /app/game-servers.json
-
-# 复制密钥目录，修复 Linux 下找不到 Keys 文件的问题
-COPY --from=build /src/Keys/ /app/Keys/
+COPY --from=build /app/Keys/ /app/Keys/
 
 EXPOSE 10000
 
